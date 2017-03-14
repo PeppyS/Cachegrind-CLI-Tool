@@ -1,7 +1,7 @@
-import re
 import click
 import os
 import glob
+from cgparser import CachegrindParser, CachegrindStats
 
 # Tool for parsing/clearing cachegrind outputs
 class CachegrindTool(object):
@@ -23,19 +23,7 @@ class CachegrindTool(object):
         # Locate cachegrind outputs, and begin parsing
         for filename in glob.glob(os.path.join(self.cachegrindOutputDir, self.cachegrindPattern)) :
             with open(filename) as cachegrindFile:
-                stats = CachegrindStats()
-                for line in cachegrindFile:
-                    # Total response time is prefixed with text 'summary:'
-                    if 'summary:' in line:
-                        # Parse total response time out of line
-                        stats.totalLoadTime = int(re.search(r'\d+', line).group()) / 1000
-                    if 'SiteController->actionIndex' in line:
-                        stats.type = CachegrindStats.HOME_PAGE
-                    elif 'CategoryController->actionIndex' in line:
-                        stats.type = CachegrindStats.CATEGORY_PAGE
-                    elif 'ItemController->actionIdp' in line:
-                        stats.type = CachegrindStats.IDP_PAGE
-
+                stats = CachegrindParser(cachegrindFile).parse()
                 # Only add to list if we were able to identify this page
                 if stats.type:
                     statsGrouped[stats.type].append(stats)
@@ -48,9 +36,9 @@ class CachegrindTool(object):
             for pageType, group in statsGrouped.items():
                 if len(group):
                     averageTotal = int(sum(stats.totalLoadTime for stats in group) / len(group))
-                    print(pageType)
-                    print("Number of cachegrinds parsed: " + str(len(group)))
-                    print("Average load time: " + str(averageTotal) + "\n")
+                    click.echo(pageType)
+                    click.echo("Number of cachegrinds parsed: " + str(len(group)))
+                    click.echo("Average load time: " + str(averageTotal) + "\n")
         return
 
     def clear(self):
@@ -60,21 +48,10 @@ class CachegrindTool(object):
             count += 1
             os.remove(filename)
         if count:
-            print("Removed " + str(count) + " cachegrind files")
+            click.echo("Removed " + str(count) + " cachegrind files")
         else:
-            print("No cachegrind files were found in path: " + self.cachegrindOutputDir)
+            click.echo("No cachegrind files were found in path: " + self.cachegrindOutputDir)
         return
-
-# Encapsulates data collected from cachegrind output
-class CachegrindStats(object):
-    # Page types
-    HOME_PAGE = 'Home Page'
-    CATEGORY_PAGE = 'Category Page'
-    IDP_PAGE = 'IDP Page'
-
-    # Data collected per cachegrind output
-    type = ''
-    totalLoadTime = 0.0
 
 @click.group()
 def cli():
@@ -82,16 +59,30 @@ def cli():
     pass
 
 @cli.command()
-@click.option('--path')
+@click.option('--path', default='/Users/peppytradesy/projects/tradesy-core/labs/performance/')
 def	parse(path):
     """Parses cache grind output files, and generates average response times for Home/Category/IDP Pages"""
     CachegrindTool(path).parse()
 
 @cli.command()
-@click.option('--path')
+@click.option('--path', default='/Users/peppytradesy/projects/tradesy-core/labs/performance/')
 def clear(path):
     """Clears all cache grind output files"""
     CachegrindTool(path).clear()
+
+@cli.command()
+def how():
+    """Instructions on setting up this tool"""
+    click.echo('Locate your php.ini configuration and make sure these values are set\n')
+    click.echo('# [xdebug]')
+    click.echo('xdebug.profiler_enable_trigger=1')
+    click.echo('xdebug.profiler_enable=0')
+    click.echo('# You can rename this folder, make sure there is a symlink to a local folder')
+    click.echo('xdebug.profiler_output_dir="/performance"')
+    click.echo('xdebug.profiler_output_name="cachegrind.out.%u"\n')
+    click.echo('And run this: sudo apachectl -k graceful\n')
+    click.echo('Now you can generate cachegrind output files by loading web pages with XDEBUG_PROFILE=1 set (GET/POST/COOKIE)')
+    return
 
 if __name__ == '__main__':
     cli()

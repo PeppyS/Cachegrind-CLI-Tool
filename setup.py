@@ -6,7 +6,7 @@ setup(
 	author='Peppy Sisay',
 	license='MIT',
 	packages=find_packages(),
-	py_modules=['cgtool'],
+	py_modules=['cgtool', 'cgparser'],
 	include_package_data=True,
 	install_requires=[
 		'Click'
